@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+	 	<meta charset="UTF-8">
+		<script src="plotly-latest.min.js"></script>
+		<script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+		<script src="moment.min.js"></script>
+	</head>
+	<body>
+		<div id="choropleth"></div>
+		<div id="timeseries"></div>
+		<div id="histogram"></div>
+		<script>
+		function date(d) {
+			return moment(d, "D-M-YYYY");
+		}
+		$.get("./country_codes.json").then(function(countries) {
+			countries["--"] = "Unknown";
+			$.get("./60_days.json").then(function(data){
+			// Choropleth
+			var geo_locs = Object.getOwnPropertyNames(data.geo);
+			var d = [{
+				type: "choropleth",
+				locationmode: 'country names',
+				locations: geo_locs.map(function(k) { return countries[k]; }),
+				z: geo_locs.map(function(k) {
+					var a = Object.getOwnPropertyNames(data.geo[k].action).reduce(function(prev, cur){
+						return prev + data.geo[k].action[cur];
+					}, 0);
+					console.log(k, a);
+					return a;
+				}),
+				text: geo_locs.map(function(k) { return countries[k]; }),
+				autocolorscale: true,
+			}];
+			var layout = {
+				title: 'CDAT Usage by country (30 days)',
+				geo: {
+					projection: {
+						type: 'robinson'
+					}
+				}
+			};
+			Plotly.plot(document.getElementById("choropleth"), d, layout, {showLink: false});
+
+			// Timeseries
+			var start = null, end = null;
+			var times = Object.getOwnPropertyNames(data.timeseries).map(function(v) {
+				var date_val = date(v);
+				if (start === null || date_val < start) {
+					start = date_val;
+				}
+				if (end === null || date_val > end) {
+					end = date_val;
+				}
+				return date_val;
+			});
+			var fmt = "DD-MM-YYYY"
+			var x_arr = [start.format(fmt)];
+			var val = start;
+			while (val < end) {
+				val.add(1, "d");
+				x_arr.push(val.format(fmt));
+			}
+			x_arr.push(end.format(fmt));
+			var keys = Object.getOwnPropertyNames(x_arr.reduce(function(prev, cur) {
+				if (data.timeseries[cur] !== undefined) {
+					return Object.getOwnPropertyNames(data.timeseries[cur].action).reduce(function(prev, cur){
+						prev[cur] = true;
+						return prev;
+					}, prev);
+				}
+				return prev;
+			}, {}));
+			var d = keys.map(function(k) {
+				var y_arr = x_arr.map(function(v) {
+					if (data.timeseries[v] !== undefined && data.timeseries[v].action[k] !== undefined) {
+						return data.timeseries[v].action[k];
+					}
+					return 0;
+				});
+				return {
+					type: "scatter",
+					x: x_arr,
+					y: y_arr,
+					name: k
+				};
+			});
+			Plotly.plot(document.getElementById("timeseries"), d);
+
+			// Histogram
+			var x_axis = Object.getOwnPropertyNames(data.histo.action);
+			var y_axis = x_axis.map(function(v) { return data.histo.action[v]; });
+			Plotly.plot(document.getElementById("histogram"), [{x: x_axis, y: y_axis, type:"bar"}])
+		});
+		})
+		</script>
+	</body>
+</html
