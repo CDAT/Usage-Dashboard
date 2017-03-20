@@ -7,6 +7,13 @@
 		<script src="moment.min.js"></script>
 	</head>
 	<body>
+		<select id="data_types">
+			<option value="action">Action</option>
+			<option value="session">Session</option>
+			<option value="user">Users</option>
+			<option value="machine">Machines</option>
+			<option value="platform">Platforms</option>
+		</select>
 		<div id="choropleth"></div>
 		<div id="timeseries"></div>
 		<div id="histogram"></div>
@@ -14,9 +21,29 @@
 		function date(d) {
 			return moment(d, "D-M-YYYY");
 		}
-		$.get("./country_codes.json").then(function(countries) {
+
+		var data_type = "platform";
+
+		$("#data_types").change(function(){
+			data_type = $(this).val();
+			console.log(data_type);
+			data.then(replot);
+		});
+
+		var country = $.get("./country_codes.json");
+		var countries;
+		var data = null;
+		country.then(function(c) {
+			countries = c;
 			countries["--"] = "Unknown";
-			$.get("./60_days.json").then(function(data){
+			data = $.get("./data/60_days.json");
+			data.then(replot);
+		});
+		var choropleth = document.getElementById("choropleth");
+		var timeseries = document.getElementById("timeseries");
+		var histogram = document.getElementById("histogram");
+
+		function replot(data) {
 			// Choropleth
 			var geo_locs = Object.getOwnPropertyNames(data.geo);
 			var d = [{
@@ -24,8 +51,8 @@
 				locationmode: 'country names',
 				locations: geo_locs.map(function(k) { return countries[k]; }),
 				z: geo_locs.map(function(k) {
-					var a = Object.getOwnPropertyNames(data.geo[k].action).reduce(function(prev, cur){
-						return prev + data.geo[k].action[cur];
+					var a = Object.getOwnPropertyNames(data.geo[k][data_type]).reduce(function(prev, cur){
+						return prev + data.geo[k][data_type][cur];
 					}, 0);
 					console.log(k, a);
 					return a;
@@ -41,7 +68,9 @@
 					}
 				}
 			};
-			Plotly.plot(document.getElementById("choropleth"), d, layout, {showLink: false});
+
+			Plotly.purge(choropleth);
+			Plotly.plot(choropleth, d, layout, {showLink: false});
 
 			// Timeseries
 			var start = null, end = null;
@@ -65,7 +94,7 @@
 			x_arr.push(end.format(fmt));
 			var keys = Object.getOwnPropertyNames(x_arr.reduce(function(prev, cur) {
 				if (data.timeseries[cur] !== undefined) {
-					return Object.getOwnPropertyNames(data.timeseries[cur].action).reduce(function(prev, cur){
+					return Object.getOwnPropertyNames(data.timeseries[cur][data_type]).reduce(function(prev, cur){
 						prev[cur] = true;
 						return prev;
 					}, prev);
@@ -74,8 +103,8 @@
 			}, {}));
 			var d = keys.map(function(k) {
 				var y_arr = x_arr.map(function(v) {
-					if (data.timeseries[v] !== undefined && data.timeseries[v].action[k] !== undefined) {
-						return data.timeseries[v].action[k];
+					if (data.timeseries[v] !== undefined && data.timeseries[v][data_type][k] !== undefined) {
+						return data.timeseries[v][data_type][k];
 					}
 					return 0;
 				});
@@ -86,14 +115,15 @@
 					name: k
 				};
 			});
-			Plotly.plot(document.getElementById("timeseries"), d);
+			Plotly.purge(timeseries);
+			Plotly.plot(timeseries, d);
 
 			// Histogram
-			var x_axis = Object.getOwnPropertyNames(data.histo.action);
-			var y_axis = x_axis.map(function(v) { return data.histo.action[v]; });
-			Plotly.plot(document.getElementById("histogram"), [{x: x_axis, y: y_axis, type:"bar"}])
-		});
-		})
+			var x_axis = Object.getOwnPropertyNames(data.histo[data_type]);
+			var y_axis = x_axis.map(function(v) { return data.histo[data_type][v]; });
+			Plotly.purge(histogram);
+			Plotly.plot(histogram, [{x: x_axis, y: y_axis, type:"bar"}]);
+		}
 		</script>
 	</body>
 </html
